@@ -5,22 +5,6 @@ from config import BOT_TOKEN, ADMIN_PASSWORD_HASH
 from password_utils import verify_password
 from handlers.test_passage import handle_test, register_answer_handlers
 from handlers.test_creation import register_test_creation_handler
-import threading
-import requests
-import time
-
-def keep_alive():
-    while True:
-        try:
-            requests.get(
-                "https://google.com",
-                timeout=10  # Таймаут 10 секунд
-            )
-        except Exception as e:
-            print(f"Keep-alive error: {e}")
-        time.sleep(300)  # 5 минут
-
-threading.Thread(target=keep_alive, daemon=True).start()
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
