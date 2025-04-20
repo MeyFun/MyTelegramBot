@@ -1,7 +1,7 @@
 from telebot import types
 from datetime import datetime, timedelta
 
-def format_time_to_msk(timestamp):
+def format_time_to_omsk(timestamp):
     try:
         if isinstance(timestamp, str):
             db_time = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
@@ -227,7 +227,7 @@ def handle_test(bot, msg, cur, conn, user_states):
             except (IndexError, ValueError):
                 bot.send_message(msg.chat.id, "Неверный формат попытки")
 
-def register_answer_handlers(bot, cur, user_states):
+def register_answer_handlers(bot, cur, user_states, conn):
     @bot.message_handler(func=lambda m: user_states.get(m.from_user.id, {}).get('stage') == 'choosing_subject_for_answers')
     def handle_subject_for_answers(msg):
         user_id = msg.from_user.id
@@ -445,7 +445,7 @@ def register_answer_handlers(bot, cur, user_states):
         for attempt, timestamp in attempts:
             # Форматируем время в локальный часовой пояс (МСК)
             try:
-                time_str = format_time_to_msk(timestamp)
+                time_str = format_time_to_omsk(timestamp)
             except:
                 time_str = timestamp
             markup.add(f"Попытка {attempt} ({time_str})")
@@ -518,7 +518,7 @@ def register_answer_handlers(bot, cur, user_states):
 
             # Форматируем время в локальный часовой пояс (МСК)
             try:
-                time_str = format_time_to_msk(timestamp)
+                time_str = format_time_to_omsk(timestamp)
             except:
                 time_str = timestamp
 
@@ -546,7 +546,7 @@ def register_answer_handlers(bot, cur, user_states):
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
             markup.add("⬅️ Назад")
 
-            bot.send_message(msg.chat.id, message, parse_mode="HTML", reply_markup=markup)
+            bot.send_message(msg.chat.id, message, reply_markup=markup)
 
             user_states[user_id] = {
                 'stage': 'viewing_attempt_details',
@@ -571,7 +571,7 @@ def register_answer_handlers(bot, cur, user_states):
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
             for attempt, timestamp in state.get('attempts', []):
                 try:
-                    time_str = format_time_to_msk(timestamp)
+                    time_str = format_time_to_omsk(timestamp)
                 except:
                     time_str = timestamp
                 markup.add(f"Попытка {attempt} ({time_str})")
@@ -589,3 +589,36 @@ def register_answer_handlers(bot, cur, user_states):
 
             bot.send_message(msg.chat.id, f"Выбран студент: *{state['student_name']}*\n\nВыберите попытку:",
                              parse_mode="HTML", reply_markup=markup)
+
+    @bot.message_handler(func=lambda m: user_states.get(m.from_user.id, {}).get('stage') == 'delete_answers_subject')
+    def delete_answers_subject(msg):
+        user_id = msg.from_user.id
+        subject = msg.text.strip()
+
+        cur.execute("SELECT DISTINCT tests.code FROM results JOIN tests ON results.code = tests.code WHERE subject = ?",
+                    (subject,))
+        codes = [row[0] for row in cur.fetchall()]
+
+        if not codes:
+            bot.send_message(msg.chat.id, "❌ Нет тестов с результатами по выбранному предмету.")
+            return
+
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        for code in codes:
+            markup.add(code)
+
+        user_states[user_id] = {'stage': 'delete_answers_code', 'subject': subject}
+        bot.send_message(msg.chat.id, f"Выбран предмет: *{subject}*\nВыберите код теста для удаления:",
+                         parse_mode="Markdown", reply_markup=markup)
+
+    @bot.message_handler(func=lambda m: user_states.get(m.from_user.id, {}).get('stage') == 'delete_answers_code')
+    def delete_answers_code(msg):
+        user_id = msg.from_user.id
+        code = msg.text.strip()
+
+        cur.execute("DELETE FROM results WHERE code = ?", (code,))
+        conn.commit()
+
+        bot.send_message(msg.chat.id, f"✅ Ответы на тест с кодом {code} удалены.",
+                         reply_markup=types.ReplyKeyboardRemove())
+        user_states.pop(user_id, None)
