@@ -256,7 +256,8 @@ def register_answer_handlers(bot, cur, user_states):
         }
 
         bot.send_message(msg.chat.id, f"Выбран предмет: *{subject}*\n\nТеперь выберите код теста:",
-                         parse_mode="Markdown", reply_markup=markup)
+                         parse_mode=""
+                                    "HTML", reply_markup=markup)
 
     @bot.message_handler(func=lambda m: user_states.get(m.from_user.id, {}).get('stage') == 'choosing_code_for_answers')
     def handle_code_for_answers(msg):
@@ -306,7 +307,7 @@ def register_answer_handlers(bot, cur, user_states):
         }
 
         bot.send_message(msg.chat.id, f"Выбран тест: *{code}*\n\nТеперь выберите группу:",
-                         parse_mode="Markdown", reply_markup=markup)
+                         parse_mode="HTML", reply_markup=markup)
 
     @bot.message_handler(func=lambda m: user_states.get(m.from_user.id, {}).get('stage') == 'choosing_group_for_answers')
     def handle_group_for_answers(msg):
@@ -329,7 +330,7 @@ def register_answer_handlers(bot, cur, user_states):
 
             bot.send_message(msg.chat.id,
                              f"Выбран предмет: *{state['selected_subject']}*\n\nТеперь выберите код теста:",
-                             parse_mode="Markdown", reply_markup=markup)
+                             parse_mode="HTML", reply_markup=markup)
             return
 
         group = msg.text.strip()
@@ -372,7 +373,7 @@ def register_answer_handlers(bot, cur, user_states):
         }
 
         bot.send_message(msg.chat.id, f"Выбрана группа: *{group}*\n\nТеперь выберите студента:",
-                         parse_mode="Markdown", reply_markup=markup)
+                         parse_mode="HTML", reply_markup=markup)
 
     @bot.message_handler(func=lambda m: user_states.get(m.from_user.id, {}).get('stage') == 'choosing_student_for_answers')
     def handle_student_for_answers(msg):
@@ -401,7 +402,7 @@ def register_answer_handlers(bot, cur, user_states):
             markup.add("⬅️ Назад")
 
             bot.send_message(msg.chat.id, f"Выбран тест: *{state['code']}*\n\nТеперь выберите группу:",
-                             parse_mode="Markdown", reply_markup=markup)
+                             parse_mode="HTML", reply_markup=markup)
             return
 
         # Находим выбранного студента
@@ -462,7 +463,7 @@ def register_answer_handlers(bot, cur, user_states):
         }
 
         bot.send_message(msg.chat.id, f"Выбран студент: *{selected_text}*\n\nВыберите попытку:",
-                         parse_mode="Markdown", reply_markup=markup)
+                         parse_mode="HTML", reply_markup=markup)
 
     @bot.message_handler(func=lambda m: user_states.get(m.from_user.id, {}).get('stage') == 'viewing_attempt')
     def handle_viewing_attempt(msg):
@@ -490,7 +491,7 @@ def register_answer_handlers(bot, cur, user_states):
             }
 
             bot.send_message(msg.chat.id, f"Выбрана группа: *{state['group']}*\n\nТеперь выберите студента:",
-                             parse_mode="Markdown", reply_markup=markup)
+                             parse_mode="HTML", reply_markup=markup)
             return
 
         # Обрабатываем выбор попытки
@@ -545,7 +546,7 @@ def register_answer_handlers(bot, cur, user_states):
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
             markup.add("⬅️ Назад")
 
-            bot.send_message(msg.chat.id, message, parse_mode="Markdown", reply_markup=markup)
+            bot.send_message(msg.chat.id, message, parse_mode="HTML", reply_markup=markup)
 
             user_states[user_id] = {
                 'stage': 'viewing_attempt_details',
@@ -587,4 +588,4 @@ def register_answer_handlers(bot, cur, user_states):
             }
 
             bot.send_message(msg.chat.id, f"Выбран студент: *{state['student_name']}*\n\nВыберите попытку:",
-                             parse_mode="Markdown", reply_markup=markup)
+                             parse_mode="HTML", reply_markup=markup)
