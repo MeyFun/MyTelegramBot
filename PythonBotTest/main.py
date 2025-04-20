@@ -19,7 +19,6 @@ conn.commit()
 
 user_states = {}
 test_building = {}
-pending_unregistrations = set()
 attempts = {}
 
 def is_admin(user_id):
@@ -37,7 +36,7 @@ def register(msg):
     first_name = msg.from_user.first_name
     last_name = msg.from_user.last_name or ""
 
-    # 🔒 Проверяем количество попыток
+    # Проверяем количество попыток
     if attempts.get(user_id, 0) >= 3:
         bot.send_message(msg.chat.id, "❌ Слишком много попыток. Попробуйте позже.")
         return
@@ -45,7 +44,7 @@ def register(msg):
     args = msg.text.strip().split()
     success = 0
 
-    # 🔒 Проверяем пароль
+    # Проверяем пароль
     if len(args) == 2 and verify_password(ADMIN_PASSWORD_HASH, args[1]):
         cur.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (user_id,))
         conn.commit()
@@ -70,7 +69,7 @@ def register(msg):
 def admin_list(msg):
         user_id = msg.from_user.id
         if not is_admin(user_id):
-            bot.send_message(msg.chat.id, "У вас нет прав.")
+            bot.send_message(msg.chat.id, "❌ У вас нет прав для просмотра списка преподавателей.")
             return
 
         cur.execute("SELECT user_id FROM admins")
@@ -120,7 +119,7 @@ def remove_teacher_start(msg):
     user_id = msg.from_user.id
 
     if not is_admin(user_id):
-        bot.send_message(msg.chat.id, "❌ Эта команда доступна только администраторам.")
+        bot.send_message(msg.chat.id, "❌ У вас нет прав удалять преподавателей")
         return
 
     cur.execute("SELECT user_id FROM admins")
@@ -158,23 +157,19 @@ def remove_teacher_selected(msg):
         bot.send_message(msg.chat.id, "Отмена удаления.", reply_markup=types.ReplyKeyboardRemove())
         return
 
-    # Парсим ID из текста (формат: "Имя (ID: 123456)")
     try:
         selected_id = int(msg.text.split("ID: ")[1].rstrip(")"))
     except (IndexError, ValueError):
         bot.send_message(msg.chat.id, "❌ Ошибка выбора. Попробуйте еще раз.")
         return
 
-    # Проверяем, что выбранный ID есть в списке
     if selected_id not in state['teachers']:
         bot.send_message(msg.chat.id, "❌ Преподаватель не найден в списке.")
         return
 
-    # Удаляем преподавателя
     cur.execute("DELETE FROM admins WHERE user_id = ?", (selected_id,))
     conn.commit()
 
-    # Удаляем состояние
     del user_states[user_id]
 
     try:
@@ -188,10 +183,30 @@ def remove_teacher_selected(msg):
 
 @bot.message_handler(commands=['all_commands'])
 def all_commands(msg):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup.add(types.KeyboardButton("/start_test"))
     user_id = msg.from_user.id
     if not is_admin(user_id):
-        bot.send_message(msg.chat.id, "❌ Команда доступна только преподавателям.")
+        bot.send_message(msg.chat.id, "❌ У вас нет доступа к этим командам.")
         return
+
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    markup.add(types.KeyboardButton("/start_test"))
+
+    if is_admin:
+        markup.add(
+            types.KeyboardButton("/add_test"),
+            types.KeyboardButton("/test_list"),
+            types.KeyboardButton("/delete_test"),
+            types.KeyboardButton("/edit_test"),
+            types.KeyboardButton("/admin_list"),
+            types.KeyboardButton("/RegLog"),
+            types.KeyboardButton("/start_test"),
+            types.KeyboardButton("/info"),
+            types.KeyboardButton("/answers"),
+            types.KeyboardButton("/delete_answers"),
+            types.KeyboardButton("/all_commands")
+        )
 
     text = (
         "📚 *Полный список команд преподавателя:*\n\n"
@@ -207,7 +222,7 @@ def all_commands(msg):
         "/delete_answers - Удалить ответы на тест\n"
         "/all_commands — показать все команды"
     )
-    bot.send_message(msg.chat.id, text, parse_mode="HTML")
+    bot.send_message(msg.chat.id, text, parse_mode="HTML", reply_markup=markup)
 
 @bot.message_handler(commands=['test_list'])
 def test_list(msg):
@@ -254,7 +269,7 @@ def choose_subject(msg):
 def show_answers(msg):
     user_id = msg.from_user.id
     if not is_admin(user_id):
-        bot.send_message(msg.chat.id, "Команда доступна только преподавателям.")
+        bot.send_message(msg.chat.id, "❌ У вас нет доступа к просмотру результатов.")
         return
 
     cur.execute("SELECT DISTINCT subject FROM tests ORDER BY subject")
@@ -278,7 +293,7 @@ def show_answers(msg):
 def edit_test_start(msg):
         user_id = msg.from_user.id
         if not is_admin(user_id):
-            bot.send_message(msg.chat.id, "Команда доступна только преподавателям.")
+            bot.send_message(msg.chat.id, "❌ У вас нет доступа к изменению тестов.")
             return
 
         cur.execute("SELECT DISTINCT subject FROM tests ORDER BY subject")
@@ -299,7 +314,7 @@ def edit_test_start(msg):
 def delete_answers(msg):
     user_id = msg.from_user.id
     if not is_admin(user_id):
-        bot.send_message(msg.chat.id, "❌ У вас нет прав использовать эту команду.")
+        bot.send_message(msg.chat.id, "❌ У вас нет прав удалять ответы.")
         return
 
     cur.execute("SELECT DISTINCT subject FROM tests")
@@ -320,7 +335,7 @@ def delete_answers(msg):
 def add_test(msg):
         user_id = msg.from_user.id
         if not is_admin(user_id):
-            bot.send_message(msg.chat.id, "У вас нет прав для создания тестов.")
+            bot.send_message(msg.chat.id, "❌ У вас нет прав создавать тесты.")
             return
 
         args = msg.text.split()
@@ -349,7 +364,7 @@ def add_test(msg):
 def delete_test_start(msg):
     user_id = msg.from_user.id
     if not is_admin(user_id):
-        bot.send_message(msg.chat.id, "❌ У вас нет прав использовать эту команду.")
+        bot.send_message(msg.chat.id, "❌ У вас нет прав удалять тесты.")
         return
 
     cur.execute("SELECT DISTINCT subject FROM tests ORDER BY subject")
@@ -363,17 +378,12 @@ def delete_test_start(msg):
     for subj in subjects:
         markup.add(subj)
 
-    # Используем test_building для хранения состояния
     test_building[user_id] = {"stage": "delete_subject"}
     bot.send_message(msg.chat.id, "Выберите предмет, тест из которого нужно удалить:", reply_markup=markup)
 
 @bot.message_handler(commands=['info'])
 def info(msg):
-    user_id = msg.from_user.id
-    cur.execute("SELECT user_id FROM admins WHERE user_id = ?", (user_id,))
-    is_admin = cur.fetchone() is not None
-
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
     markup.add(types.KeyboardButton("/start_test"))
 
     if is_admin:
@@ -384,7 +394,6 @@ def info(msg):
             types.KeyboardButton("/edit_test"),
             types.KeyboardButton("/all_commands")
         )
-
     if is_admin:
         text = (
             "👨‍🏫 *Вы преподаватель.*\n\n"
