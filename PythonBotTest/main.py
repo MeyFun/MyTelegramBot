@@ -3,7 +3,7 @@ import sqlite3
 from telebot import types
 from config import BOT_TOKEN, ADMIN_PASSWORD_HASH
 from password_utils import verify_password
-from handlers.test_passage import handle_test, register_answer_handlers
+from handlers.test_passage import handle_test, register_answer_handlers, format_time_to_omsk
 from handlers.test_creation import register_test_creation_handler
 
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -66,44 +66,6 @@ def register(msg):
 
     bot.send_message(msg.chat.id, response)
 
-@bot.message_handler(commands=['unregister'])
-def unregister(msg):
-    user_id = msg.from_user.id
-    if not is_admin(user_id):
-        bot.send_message(msg.chat.id, "У вас нет прав использовать эту команду.")
-        return
-
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    markup.add("✅ Подтвердить выход", "❌ Отменить")
-    pending_unregistrations.add(user_id)
-
-    bot.send_message(
-        msg.chat.id,
-        "Вы уверены, что хотите выйти из роли преподавателя?",
-        reply_markup=markup
-    )
-
-@bot.message_handler(func=lambda m: m.from_user.id in pending_unregistrations)
-def confirm_unregister(msg):
-    user_id = msg.from_user.id
-    text = msg.text.strip()
-
-    if text == "✅ Подтвердить выход":
-        cur.execute("DELETE FROM admins WHERE user_id = ?", (user_id,))
-        conn.commit()
-        pending_unregistrations.remove(user_id)
-
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add("/start_test", "/info")
-        bot.send_message(msg.chat.id, "Вы понижены до ученика.", reply_markup=markup)
-
-    elif text == "❌ Отменить":
-        pending_unregistrations.remove(user_id)
-        bot.send_message(msg.chat.id, "Вы остались преподавателем.", reply_markup=types.ReplyKeyboardRemove())
-
-    else:
-        bot.send_message(msg.chat.id, "Пожалуйста, используйте кнопки для подтверждения.")
-
 @bot.message_handler(commands=['admin_list'])
 def admin_list(msg):
         user_id = msg.from_user.id
@@ -148,7 +110,8 @@ def reg_log(msg):
             user_id, username, first_name, last_name, success, timestamp = attempt
             name = f"@{username}" if username else f"{first_name} {last_name}".strip()
             status = "✅" if success else "❌"
-            log_text += f"{status} {name} (ID: {user_id}) - {timestamp}\n"
+            formatted_time = format_time_to_omsk(timestamp)
+            log_text += f"{status} {name} (ID: {user_id}) - {formatted_time}\n"
 
         bot.send_message(msg.chat.id, log_text, parse_mode="HTML")
 
@@ -238,7 +201,6 @@ def all_commands(msg):
         "/edit_test — редактировать вопрос\n"
         "/admin_list — список преподавателей\n"
         "/RegLog — логи регистрации\n"
-        "/unregister — выйти из роли преподавателя\n"
         "/start_test — пройти тест как студент\n"
         "/info — показать основные команды\n"
         "/answers - показать ответы студентов\n"
@@ -335,24 +297,24 @@ def edit_test_start(msg):
 
 @bot.message_handler(commands=['delete_answers'])
 def delete_answers(msg):
-        user_id = msg.from_user.id
-        if not is_admin(user_id):
-            bot.send_message(msg.chat.id, "❌ У вас нет прав использовать эту команду.")
-            return
+    user_id = msg.from_user.id
+    if not is_admin(user_id):
+        bot.send_message(msg.chat.id, "❌ У вас нет прав использовать эту команду.")
+        return
 
-        cur.execute("SELECT DISTINCT code FROM results")
-        codes = [row[0] for row in cur.fetchall()]
+    cur.execute("SELECT DISTINCT subject FROM tests")
+    subjects = [row[0] for row in cur.fetchall() if row[0]]
 
-        if not codes:
-            bot.send_message(msg.chat.id, "❌ Нет тестов с результатами.")
-            return
+    if not subjects:
+        bot.send_message(msg.chat.id, "❌ Нет предметов с тестами.")
+        return
 
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        for code in codes:
-            markup.add(code)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    for subject in subjects:
+        markup.add(subject)
 
-        user_states[user_id] = {'stage': 'delete_answers'}
-        bot.send_message(msg.chat.id, "Выберите код теста, чьи ответы нужно удалить:", reply_markup=markup)
+    user_states[user_id] = {'stage': 'delete_answers_subject'}
+    bot.send_message(msg.chat.id, "Выберите предмет, чьи ответы вы хотите удалить:", reply_markup=markup)
 
 @bot.message_handler(commands=['add_test'])
 def add_test(msg):
@@ -450,7 +412,7 @@ def start_test(msg):
     bot.send_message(msg.chat.id, "Введите код доступа к тесту:")
 
 register_test_creation_handler(bot, conn, cur, test_building)
-register_answer_handlers(bot, cur, user_states)
+register_answer_handlers(bot, cur, user_states, conn)
 
 @bot.message_handler(func=lambda m: m.from_user.id in user_states)
 def handle_user_test(msg):
