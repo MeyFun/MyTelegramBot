@@ -20,7 +20,7 @@ conn.commit()
 user_states = {}
 test_building = {}
 pending_unregistrations = set()
-attempts = {} 
+attempts = {}
 
 def is_admin(user_id):
     cur.execute("SELECT user_id FROM admins WHERE user_id = ?", (user_id,))
@@ -127,7 +127,7 @@ def admin_list(msg):
             except Exception:
                 text += f"• ID: {uid} (недоступен)\n"
 
-        bot.send_message(msg.chat.id, text, parse_mode="Markdown")
+        bot.send_message(msg.chat.id, text, parse_mode="HTML")
 
 @bot.message_handler(commands=['RegLog'])
 def reg_log(msg):
@@ -150,7 +150,7 @@ def reg_log(msg):
             status = "✅" if success else "❌"
             log_text += f"{status} {name} (ID: {user_id}) - {timestamp}\n"
 
-        bot.send_message(msg.chat.id, log_text, parse_mode="Markdown")
+        bot.send_message(msg.chat.id, log_text, parse_mode="HTML")
 
 @bot.message_handler(commands=['remove_teacher'])
 def remove_teacher_start(msg):
@@ -286,7 +286,7 @@ def choose_subject(msg):
             message += f"🔹 Код: *{code}* — {count} вопросов\n"
 
         del user_states[user_id]
-        bot.send_message(msg.chat.id, message, parse_mode="Markdown", reply_markup=types.ReplyKeyboardRemove())
+        bot.send_message(msg.chat.id, message, parse_mode="HTML", reply_markup=types.ReplyKeyboardRemove())
 
 @bot.message_handler(commands=['answers'])
 def show_answers(msg):
