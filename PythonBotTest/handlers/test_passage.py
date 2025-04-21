@@ -18,8 +18,11 @@ def send_next_question(bot, chat_id, user_id, user_states):
     questions = state['questions']
     current = state['current']
     total = len(questions)
-
+    progress_bar = ""
+    
     if current >= total:
+        progress_bat = "🟩" * (total - 2)
+        bot.send_message(chat_id, f"*Прогресс:* {progress_bar}", parse_mode="Markdown")
         bot.send_message(chat_id, "Вы завершили тест. Спасибо!")
         del user_states[user_id]
         return
@@ -27,7 +30,6 @@ def send_next_question(bot, chat_id, user_id, user_states):
     question_text, _, options = questions[current]
     state['current'] += 1
 
-    progress_bar = ""
     for i in range(2, total):
         if i < state['current'] - 1:
             progress_bar += "🟩"
