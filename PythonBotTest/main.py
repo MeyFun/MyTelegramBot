@@ -33,6 +33,7 @@ def is_admin(user_id):
 def start(msg):
     bot.send_message(msg.chat.id, "Привет! Чтобы начать тестирование, введи /start_test. Для справки — /info")
 
+temp_passwords = {} 
 @bot.message_handler(commands=['register'])
 def register(msg):
     user_id = msg.from_user.id
@@ -46,27 +47,40 @@ def register(msg):
         return
 
     args = msg.text.strip().split()
+    if len(args) != 2:
+        bot.send_message(msg.chat.id, "⚠️ Используйте: /register ваш_пароль")
+        return
+
+    entered_password = args[1]
     success = 0
 
-    # Проверяем пароль
-    if len(args) == 2 and verify_password(ADMIN_PASSWORD_HASH, args[1]):
-        cur.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (user_id,))
-        conn.commit()
-        success = 1
-        response = "✅ Вы зарегистрированы как преподаватель."
-    else:
+    # Первый ввод — просто сохраняем, но говорим, что неверный
+    if user_id not in temp_passwords:
+        temp_passwords[user_id] = entered_password
         attempts[user_id] = attempts.get(user_id, 0) + 1
-        remaining_attempts = 3 - attempts[user_id]
-        response = f"❌ Неверный код. Осталось попыток: {remaining_attempts}"
+        remaining = 3 - attempts[user_id]
+        response = f"❌ Неверный код. Осталось попыток: {remaining}"
 
-    # Записываем попытку в базу (для логов)
+    # Второй ввод — сравниваем с первым
+    else:
+        if entered_password == temp_passwords[user_id] and verify_password(ADMIN_PASSWORD_HASH, entered_password):
+            cur.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (user_id,))
+            conn.commit()
+            success = 1
+            response = "✅ Вы зарегистрированы как преподаватель."
+        else:
+            attempts[user_id] = attempts.get(user_id, 0) + 1
+            remaining = 3 - attempts[user_id]
+            response = f"❌ Неверный код. Осталось попыток: {remaining}"
+        temp_passwords.pop(user_id, None)  # Удаляем временное хранилище
+
+    # Логируем попытк
     cur.execute("""
         INSERT INTO registration_attempts 
         (user_id, username, first_name, last_name, success) 
         VALUES (?, ?, ?, ?, ?)
     """, (user_id, username, first_name, last_name, success))
     conn.commit()
-
     bot.send_message(msg.chat.id, response)
 
 @bot.message_handler(commands=['admin_list'])
