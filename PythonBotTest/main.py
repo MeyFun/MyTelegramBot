@@ -1,14 +1,14 @@
-import telebot
-import sqlite3
 import subprocess
 import sys
+subprocess.call([sys.executable, "install_packages.py"])
+
+import telebot
+import sqlite3
 from telebot import types
 from config import BOT_TOKEN, ADMIN_PASSWORD_HASH
 from password_utils import verify_password
 from handlers.test_passage import handle_test, register_answer_handlers, format_time_to_omsk
 from handlers.test_creation import register_test_creation_handler
-
-subprocess.call([sys.executable, "install_packages.py"])
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
