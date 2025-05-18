@@ -16,36 +16,53 @@ def format_time_to_omsk(timestamp):
 def send_next_question(bot, chat_id, user_id, user_states):
     state = user_states[user_id]
     questions = state['questions']
-    current = state['current']
-    total = len(questions)
-    progress_bar = ""
-    
-    if current >= total:
-        progress_bat = "🟩" * (total - 2)
-        bot.send_message(chat_id, f"*Прогресс:* {progress_bar}", parse_mode="Markdown")
-        bot.send_message(chat_id, "Вы завершили тест. Спасибо!")
-        del user_states[user_id]
-        return
+    remaining = state.get('remaining_questions', [])
 
-    question_text, _, options = questions[current]
-    state['current'] += 1
+    # Если остались непройденные вопросы
+    if remaining:
+        current_index = remaining.pop(0)
+        state['current_index'] = current_index
 
-    for i in range(2, total):
-        if i < state['current'] - 1:
-            progress_bar += "🟩"
-        elif i == state['current'] - 1:
-            progress_bar += "🔷"
-        else:
-            progress_bar += "⬜"
-    if (current >= 2): bot.send_message(chat_id, f"*Прогресс:* {progress_bar}", parse_mode="Markdown")
-    
-    if options:
-        opt = options.split(',')
+        question_text, _, options = questions[current_index]
+
+        # Прогресс-бар
+        progress_bar = ""
+        total = len(questions)
+        for i in range(2, total):
+            if i < current_index:
+                progress_bar += "🟩"
+            elif i == current_index:
+                progress_bar += "🔷"
+            elif i not in remaining:
+                progress_bar += "🟩"
+            else:
+                progress_bar += "⬜"
+
+        if current_index >= 2:
+            bot.send_message(chat_id, f"*Прогресс:* {progress_bar}", parse_mode="Markdown")
+
+        # Отправляем вопрос
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        markup.add(*opt)
+        if options:
+            for opt in options.split(','):
+                markup.add(opt)
+        if current_index >= 2:
+            markup.add("Пропустить")
         bot.send_message(chat_id, question_text, reply_markup=markup)
+
     else:
-        bot.send_message(chat_id, question_text, reply_markup=types.ReplyKeyboardRemove())
+        # Все вопросы пройдены — проверим, есть ли пропущенные
+        unanswered_indexes = [
+            i for i in range(len(questions))
+            if not any(q[0] == questions[i][0] for q in state['answers'])
+        ]
+
+        if unanswered_indexes:
+            state['remaining_questions'] = unanswered_indexes
+            send_next_question(bot, chat_id, user_id, user_states)
+        else:
+            bot.send_message(chat_id, "✅ Вы завершили тест. Спасибо!", reply_markup=types.ReplyKeyboardRemove())
+            del user_states[user_id]
 
 def handle_test(bot, msg, cur, conn, user_states):
     user_id = msg.from_user.id
@@ -66,35 +83,53 @@ def handle_test(bot, msg, cur, conn, user_states):
             bot.send_message(msg.chat.id, "❌ Ввод кода отменён. Возвращаюсь в меню.", reply_markup=markup)
             return
 
-        code = code
-
         cur.execute("SELECT question, correct_answer, options FROM tests WHERE code = ?", (code,))
         questions = cur.fetchall()
 
         if not questions:
             bot.send_message(msg.chat.id, "Код неверный или тест не найден.")
             return
-        state.update({
+
+        user_states[user_id] = {
+            'stage': 'in_test',
             'code': code,
             'questions': questions,
-            'current': 0,
-            'answers': [],
-            'stage': 'in_test'
-        })
+            'remaining': list(range(len(questions))),
+            'skipped': [],
+            'answers': {},
+            'attempt': 1
+        }
         send_next_question(bot, msg.chat.id, user_id, user_states)
 
     elif state['stage'] == 'in_test':
-        current_q = state['questions'][state['current'] - 1]
-        cur.execute("SELECT MAX(attempt) FROM results WHERE user_id = ? AND code = ?", (user_id, state['code']))
-        last_attempt = cur.fetchone()[0] or 0
-        attempt = state.get("attempt", last_attempt + 1)
-        state["attempt"] = attempt
 
-        cur.execute("""
-            INSERT INTO results (user_id, code, question, answer, attempt)
-            VALUES (?, ?, ?, ?, ?)
-        """, (user_id, state['code'], current_q[0], msg.text, attempt))
-        conn.commit()
+        current_index = state['current_index']
+
+        question = state['questions'][current_index][0]
+
+        if msg.text.strip().lower() != "пропустить":
+            cur.execute("SELECT MAX(attempt) FROM results WHERE user_id = ? AND code = ?", (user_id, state['code']))
+
+            last_attempt = cur.fetchone()[0] or 0
+
+            attempt = state.get("attempt", last_attempt + 1)
+
+            state["attempt"] = attempt
+
+            cur.execute("""
+
+                INSERT INTO results (user_id, code, question, answer, attempt)
+
+                VALUES (?, ?, ?, ?, ?)
+
+            """, (user_id, state['code'], question, msg.text.strip(), attempt))
+
+            conn.commit()
+
+            if 'answers' not in state or not isinstance(state['answers'], list):
+                state['answers'] = []
+
+            state['answers'].append((question, msg.text.strip()))
 
         send_next_question(bot, msg.chat.id, user_id, user_states)
 
