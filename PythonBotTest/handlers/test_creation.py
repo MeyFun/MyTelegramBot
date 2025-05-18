@@ -230,28 +230,46 @@ def register_test_creation_handler(bot, conn, cur, test_building):
                 bot.send_message(msg.chat.id, "❌ Введите корректный номер.")
 
         elif state["stage"] == "edit_new_text":
+
             new_text = msg.text.strip()
+
             rowid = state["editing_rowid"]
+
             state["new_question_text"] = new_text
 
-            # Сохраняем текст, спрашиваем — редактировать ли варианты
-            cur.execute("UPDATE tests SET question = ? WHERE rowid = ?", (new_text, rowid))
-            conn.commit()
+            # Обновляем только текст вопроса, но пока не сохраняем тип — сначала спросим, какие будут ответы
 
-            # Проверим, есть ли варианты вообще
-            cur.execute("SELECT options FROM tests WHERE rowid = ?", (rowid,))
-            row = cur.fetchone()
-            if not row or not row[0]:
-                bot.send_message(msg.chat.id, "✅ Вопрос обновлён (это открытый вопрос).",
+            state["stage"] = "edit_choose_type"
+
+            markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+
+            markup.add("Свободный ответ")
+
+            markup.add("Варианты ответа (2-10)")
+
+            bot.send_message(msg.chat.id, "Выберите тип вопроса:", reply_markup=markup)
+
+        elif state["stage"] == "edit_choose_type":
+            answer_type = msg.text.strip().lower()
+
+            if answer_type == "свободный ответ":
+                rowid = state["editing_rowid"]
+                cur.execute("UPDATE tests SET question = ?, options = '', correct_answer = '' WHERE rowid = ?",
+                            (state["new_question_text"], rowid))
+                conn.commit()
+
+                bot.send_message(msg.chat.id, "✅ Вопрос успешно обновлён как открытый.",
                                  reply_markup=types.ReplyKeyboardRemove())
                 del test_building[user_id]
                 return
 
-            # Если варианты есть — спрашиваем, редактировать ли их
-            state["stage"] = "edit_options_confirm"
-            markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-            markup.add("Да", "Нет")
-            bot.send_message(msg.chat.id, "Хотите изменить варианты ответов?", reply_markup=markup)
+            elif answer_type == "варианты ответа (2-10)":
+                state["stage"] = "edit_options_count"
+                bot.send_message(msg.chat.id, "Сколько будет новых вариантов ответа? (от 2 до 10):",
+                                 reply_markup=types.ReplyKeyboardRemove())
+                return
+            else:
+                bot.send_message(msg.chat.id, "❌ Пожалуйста, выберите из предложенных типов ответа.")
 
         elif state["stage"] == "edit_options_confirm":
             if msg.text.strip().lower() == "да":
